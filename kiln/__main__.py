@@ -1,8 +1,11 @@
+import glob
 import json
 import os
+import wave
 import webbrowser
 
 import click
+import openai
 import requests
 import yaml
 from dotenv import load_dotenv
@@ -17,6 +20,9 @@ from langchain.prompts import PromptTemplate
 load_dotenv() # loads openai api key from .env file
 
 OPENAI_API_KEY=os.getenv("OPENAI_API_KEY")
+OPENAI_ORGANIZATION=os.getenv("OPENAI_ORGANIZATION")
+openai.api_key=OPENAI_API_KEY
+openai.organization=OPENAI_ORGANIZATION
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -70,6 +76,12 @@ def main():
     #         "content": "string",
     #     }
     # )
+    folder = "/Users/taylor/Library/Application Support/com.apple.voicememos/Recordings/"
+    m4as = glob.glob(os.path.join(folder, '*.m4a'))
+    most_recent_file = max(m4as, key=os.path.getctime)
+    print(most_recent_file)
+    with open(most_recent_file, "rb") as audio_file:
+      transcript = openai.Audio.transcribe("whisper-1", audio_file)['text']
     with open("content.yaml", "r") as file:
         content = yaml.safe_load(file)
     llm = ChatOpenAI(model_name="gpt-4", temperature=0.9)
@@ -90,33 +102,32 @@ def main():
     style_chain = LLMChain(llm=llm, prompt=style_prompt)
     image_gen_prompting_prompt = PromptTemplate(
         input_variables=["post_transcript"],
-        template="You receive the transcript of a conversational message. Pick one object from the conversation. Write a six word or less description of an image of the object. It should match the theme of the transcript. The description should be a good prompt for an image generation AI model. Do not include numbers or dates in the response. Transcript: {post_transcript}")
+        template="Visually describe a scene related to one of the things mentioned in the provided transcript. The description should be six words or less. Do not include numbers or dates in the response. Transcript: {post_transcript}")
     image_gen_prompting_chain = LLMChain(llm=llm, prompt=image_gen_prompting_prompt)
 
     # for source in content['sources']:
     #     source_summary = summarize_chain.run(source['body'])
     #     # TODO store in vector db
-    
-    for index, post in enumerate(content['posts']):
-        # post_summary = summarize_chain.run(post['transcript'])
-        # print(post_summary)
-        # post['summary'] = post_summary
-      img_prompt = image_gen_prompting_chain.run(post['transcript'])
-      img_src = get_image(img_prompt)
+  
+      # post_summary = summarize_chain.run(post['transcript'])
+      # print(post_summary)
+      # post['summary'] = post_summary
+    img_prompt = image_gen_prompting_chain.run(transcript)
+    img_src = get_image(img_prompt)
 
-      underlined_transcript = reference_chain.run(post['transcript'])
-  #     # TODO look up in vector db and store references
-      styled_transcript = style_chain.run(underlined_transcript)
-    
-      html = HTML_TEMPLATE.format(
-          img_src=img_src,
-          styled_transcript=styled_transcript
-      )
-      html_filename = f'card_{index}.html'
-      with open(html_filename, "w") as file:
-          file.write(html)
-          print(html_filename)
-      webbrowser.open(html_filename, new=0, autoraise=True)
+    underlined_transcript = reference_chain.run(transcript)
+#     # TODO look up in vector db and store references
+    styled_transcript = style_chain.run(underlined_transcript)
+  
+    html = HTML_TEMPLATE.format(
+        img_src=img_src,
+        styled_transcript=styled_transcript
+    )
+    html_filename = f'card.html'
+    with open(html_filename, "w") as file:
+        file.write(html)
+        print(html_filename)
+    webbrowser.open(html_filename, new=0, autoraise=True)
 
 
 
@@ -150,6 +161,53 @@ def get_image(prompt):
     url = response_json['data'][0]['url']
     return url
         
+
+# def record_audio():
+#   chunk = 1024  # Record in chunks of 1024 samples
+#   sample_format = pyaudio.paInt16  # 16 bits per sample
+#   channels = 2
+#   fs = 44100  # Record at 44100 samples per second
+#   max_seconds = 10
+#   filename = "output.wav"
+
+#   p = pyaudio.PyAudio()  # Create an interface to PortAudio
+
+#   print('Recording')
+
+#   stream = p.open(format=sample_format,
+#                   channels=channels,
+#                   rate=fs,
+#                   frames_per_buffer=chunk,
+#                   input=True)
+
+#   frames = []  # Initialize array to store frames
+
+#   try:
+#       for i in range(0, int(fs / chunk * max_seconds)):
+#         data = stream.read(chunk)
+#         frames.append(data)
+#   except KeyboardInterrupt:
+#       pass
+
+#   # Store data in chunks for 3 seconds
+  
+
+#   # Stop and close the stream 
+#   stream.stop_stream()
+#   stream.close()
+#   # Terminate the PortAudio interface
+#   p.terminate()
+
+#   print('Finished recording')
+
+#   # Save the recorded data as a WAV file
+#   wf = wave.open(filename, 'wb')
+#   wf.setnchannels(channels)
+#   wf.setsampwidth(p.get_sample_size(sample_format))
+#   wf.setframerate(fs)
+#   wf.writeframes(b''.join(frames))
+#   wf.close()
+#   return filename
 
 
 

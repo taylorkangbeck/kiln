@@ -12,6 +12,7 @@ openai = "^0.27.2"
 python-dotenv = "^1.0.0"
 click = "^8.1.3"
 scrapeghost = "^0.4.2"
+pyaudio = "^0.2.13"
 
 
 [build-system]
